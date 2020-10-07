@@ -7,61 +7,32 @@ use Illuminate\Http\Request;
 use App\Http\Requests;
 use App\Http\Controllers\Controller;
 
-//Cargamos el fabricante Contoller
 use App\Models\Fabricante;
-
-//Activamos el uso de las funciones de caché
-use Illuminate\Support\Facades\Cache;
-
-class FabricanteAvionController extends Controller{
-
-    public function __construct(){
-
-        $this->middleware('auth.basic',['only'=>['store','update','destroy']]);
-    }
+use App\Models\Avion;
 
 
+class FabricanteAvionController extends Controller
+{
     /**
      * Display a listing of the resource.
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
-    {   
-        // return "En el index de Fabricante.";
-		// Devolvemos un JSON con todos los fabricantes.
-        // return Fabricante::all();
-        
-        // Caché se actualizará con nuevos datos cada 15 segundos.
-		// cachefabricantes es la clave con la que se almacenarán 
-		// los registros obtenidos de Fabricante::all()
-        // El segundo parámetro son los minutos.
-        $fabricantes=Cache::remember('cacheFabricantes',15/60,function()
-        {
-            // Para la paginación en Laravel se usa "Paginator"
-			// En lugar de devolver 
-			// return Fabricante::all();
-            // devolveremos return Fabricante::paginate();
-            // 
-			// Este método paginate() está orientado a interfaces gráficas. 
-			// Paginator tiene un método llamado render() que permite construir
-			// los enlaces a página siguiente, anterior, etc..
-			// Para la API RESTFUL usaremos un método más sencillo llamado simplePaginate() que
-            // aporta la misma funcionalidad
-            return Fabricante::simplePaginate(10);
+    public function index($idFabricante)
+    {
+        // Devolverá todos los aviones.
+		//return "Mostrando los aviones del fabricante con Id $idFabricante";
+		$fabricante=Fabricante::find($idFabricante);
 
-        });
+		if (! $fabricante)
+		{
+			// Se devuelve un array errors con los errores encontrados y cabecera HTTP 404.
+			// En code podríamos indicar un código de error personalizado de nuestra aplicación si lo deseamos.
+			return response()->json(['errors'=>array(['code'=>404,'message'=>'No se encuentra un fabricante con ese código.'])],404);
+		}
 
-        // Para devolver un JSON con código de respuesta HTTP sin caché.
-		// return response()->json(['status'=>'ok', 'data'=>Fabricante::all()],200);
-
-		// Devolvemos el JSON usando caché.
-		// return response()->json(['status'=>'ok', 'data'=>$fabricantes],200);
-		 
-		// Con la paginación lo haremos de la siguiente forma:
-        // Devolviendo también la URL a l
-        return response()->json(['status'=>'ok', 'siguiente'=>$fabricantes->nextPageUrl(),'anterior'=>$fabricantes->previousPageUrl(),'data'=>$fabricantes->items()],200);
-
+		return response()->json(['status'=>'ok','data'=>$fabricante->aviones()->get()],200);
+		//return response()->json(['status'=>'ok','data'=>$fabricante->aviones],200);
     }
 
     /**
@@ -69,15 +40,11 @@ class FabricanteAvionController extends Controller{
      *
      * @return \Illuminate\Http\Response
      */
-    
-     // No se utiliza este método por que se usaría para mostrar un formulario
-	// de creación de Fabricantes. Y una API REST no hace eso.
-	/*
-	public function create()
-	{
-		//
-	}
-	*/
+    public function create($idFabricante)
+    {
+        return "Se muestra formulario para crear un avión del fabricante $idFabricante.";
+
+    }
 
     /**
      * Store a newly created resource in storage.
@@ -87,19 +54,39 @@ class FabricanteAvionController extends Controller{
      */
     public function store(Request $request)
     {
-        // Método llamado al hacer un POST.
-		// Comprobamos que recibimos todos los campos.
-        if (!$request->input('nombre') || !$request->input('direccion') || !$request->input('telefono')){
-            // NO estamos recibiendo los campos necesarios. Devolvemos error.
-			return response()->json(['errors'=>array(['code'=>422,'message'=>'Faltan datos necesarios para procesar el alta.'])],422);
+        /* Necesitaremos el fabricante_id que lo recibimos en la ruta
+		 #Serie (auto incremental)
+		Modelo
+		Longitud
+		Capacidad
+		Velocidad
+        Alcance */
+        
+        // Primero comprobaremos si estamos recibiendo todos los campos.
+        if ( !$request->input('modelo') || !$request->input('longitud') || !$request->input('capacidad') || !$request->input('velocidad') || !$request->input('alcance') ){
+            // Se devuelve un array errors con los errores encontrados y cabecera HTTP 422 Unprocessable Entity – [Entidad improcesable] Utilizada para errores de validación.
+			return response()->json(['errors'=>array(['code'=>422,'message'=>'Faltan datos necesarios para el proceso de alta.'])],422);
         }
 
-        // Insertamos los datos recibidos en la tabla.
-        $nuevoFabricante=Fabricante::create($request->all());
+        // Buscamos el Fabricante.
+        $fabricante= Fabricante::find($idFabricante);
         
-        // Devolvemos la respuesta Http 201 (Created) + los datos del nuevo fabricante + una cabecera de Location + cabecera JSON
-		$respuesta= Response::make(json_encode(['data'=>$nuevoFabricante]),201)->header('Location','http://www.dominio.local/fabricantes/'.$nuevoFabricante->id)->header('Content-Type','application/json');
-		return $respuesta;
+        // Si no existe el fabricante que le hemos pasado mostramos otro código de error de no encontrado.
+
+        if (!$fabricante)
+		{
+			// Se devuelve un array errors con los errores encontrados y cabecera HTTP 404.
+			// En code podríamos indicar un código de error personalizado de nuestra aplicación si lo deseamos.
+			return response()->json(['errors'=>array(['code'=>404,'message'=>'No se encuentra un fabricante con ese código.'])],404);
+        }
+        // Si el fabricante existe entonces lo almacenamos.
+		// Insertamos una fila en Aviones con create pasándole todos los datos recibidos.
+        $nuevoAvion=$fabricante->aviones()->create($request->all());
+        
+        // Más información sobre respuestas en http://jsonapi.org/format/
+        // Devolvemos el código HTTP 201 Created – [Creada] Respuesta a un POST que resulta en una creación. Debería ser combinado con un encabezado Location, apuntando a la ubicación del nuevo recurso.
+        return response()->json(['data'=>$nuevoAvion], 201)->header('Location',  url('/api/v1/').'/aviones/'.$nuevoAvion->serie);
+
     }
 
     /**
@@ -108,21 +95,9 @@ class FabricanteAvionController extends Controller{
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function show($id)
+    public function show($idFabricante,$idAvion)
     {
-        // Corresponde con la ruta /fabricantes/{fabricante}
-		// Buscamos un fabricante por el ID.
-		$fabricante=Fabricante::find($id);
-
-		// Chequeamos si encontró o no el fabricante
-		if (! $fabricante)
-		{
-			// Se devuelve un array errors con los errores detectados y código 404
-			return response()->json(['errors'=>Array(['code'=>404,'message'=>'No se encuentra un fabricante con ese código.'])],404);
-		}
-
-		// Devolvemos la información encontrada.
-		return response()->json(['status'=>'ok','data'=>$fabricante],200);
+        return "Se muestra avión $idAvion del fabricante $idFabricante";
 
     }
 
@@ -132,12 +107,11 @@ class FabricanteAvionController extends Controller{
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    /*
     public function edit($idFabricante,$idAvion)
     {
         return "Se muestra formulario para editar el avión $idAvion del fabricante $idFabricante";
     }
-    */
+
     /**
      * Update the specified resource in storage.
      *
@@ -145,85 +119,109 @@ class FabricanteAvionController extends Controller{
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function update( $id,Request $request)
-    {   
-        // Vamos a actualizar un fabricante.
-		// Comprobamos si el fabricante existe. En otro caso devolvemos error.
-		$fabricante=Fabricante::find($id);
+    public function update(Request $request, $id)
+    {
+        // Comprobamos si el fabricante que nos están pasando existe o no.
+        $fabricante=Fabricante::find($idFabricante);
 
-        // Si no existe mostramos error.
-		if (! $fabricante)
-		{
-			// Devolvemos error 404.
-			return response()->json(['errors'=>array(['code'=>404,'message'=>'No se encuentra un fabricante con ese código.'])],404);
-        }
-        
-        // Almacenamos en variables para facilitar el uso, los campos recibidos.
-		$nombre=$request->input('nombre');
-		$direccion=$request->input('direccion');
-        $telefono=$request->input('telefono');
-        
-        // Comprobamos si recibimos petición PATCH(parcial) o PUT (Total)
-        if ($request->method()=='PATCH')
+        // Si no existe ese fabricante devolvemos un error.
+        if (!$fabricante)
         {
+            // Se devuelve un array errors con los errores encontrados y cabecera HTTP 404.
+            // En code podríamos indicar un código de error personalizado de nuestra aplicación si lo deseamos.
+            return response()->json(['errors'=>array(['code'=>404,'message'=>'No se encuentra un fabricante con ese código.'])],404);
+        }
+
+        // El fabricante existe entonces buscamos el avion que queremos editar asociado a ese fabricante.
+        $avion = $fabricante->aviones()->find($idAvion);
+
+        // Si no existe ese avión devolvemos un error.
+        if (!$avion)
+        {
+            // Se devuelve un array errors con los errores encontrados y cabecera HTTP 404.
+            // En code podríamos indicar un código de error personalizado de nuestra aplicación si lo deseamos.
+            return response()->json(['errors'=>array(['code'=>404,'message'=>'No se encuentra un avión con ese código asociado al fabricante.'])],404);
+        }
+
+
+        // Listado de campos recibidos teóricamente.
+        $modelo=$request->input('modelo');
+        $longitud=$request->input('longitud');
+        $capacidad=$request->input('capacidad');
+        $velocidad=$request->input('velocidad');
+        $alcance=$request->input('alcance');
+
+        // Necesitamos detectar si estamos recibiendo una petición PUT o PATCH.
+        // El método de la petición se sabe a través de $request->method();
+        /*  Modelo      Longitud        Capacidad       Velocidad       Alcance */
+        if ($request->method() === 'PATCH')
+        {
+            // Creamos una bandera para controlar si se ha modificado algún dato en el método PATCH.
             $bandera = false;
 
-            // Actualización parcial de datos.
-			if ($nombre !=null && $nombre!='')
-			{
-				$fabricante->nombre=$nombre;
-				$bandera=true;
+            // Actualización parcial de campos.
+            if ($modelo)
+            {
+                $avion->modelo = $modelo;
+                $bandera=true;
             }
-            
-            // Actualización parcial de datos.
-			if ($direccion !=null && $direccion!='')
-			{
-				$fabricante->direccion=$direccion;
-				$bandera=true;
-            }
-            
-            // Actualización parcial de datos.
-			if ($telefono !=null && $telefono!='')
-			{
-				$fabricante->telefono=$telefono;
-				$bandera=true;
-            }
-            
-            if ($bandera)
-			{
-				// Grabamos el fabricante.
-				$fabricante->save();
 
-				// Devolvemos un código 200.
-				return response()->json(['status'=>'ok','data'=>$fabricante],200);
+            if ($longitud)
+            {
+                $avion->longitud = $longitud;
+                $bandera=true;
+            }
+
+            if ($capacidad)
+            {
+                $avion->capacidad = $capacidad;
+                $bandera=true;
+            }
+
+            if ($velocidad)
+            {
+                $avion->velocidad = $velocidad;
+                $bandera=true;
+            }
+
+            if ($alcance)
+            {
+                $avion->alcance = $alcance;
+                $bandera=true;
+            }
+
+            if ($bandera)
+            {
+                // Almacenamos en la base de datos el registro.
+                $avion->save();
+                return response()->json(['status'=>'ok','data'=>$avion], 200);
             }
             else
             {
-                // Devolvemos un código 304 Not Modified.
-				return response()->json(['errors'=>array(['code'=>304,'message'=>'No se ha modificado ningún dato del fabricante.'])],304);
+                // Se devuelve un array errors con los errores encontrados y cabecera HTTP 304 Not Modified – [No Modificada] Usado cuando el cacheo de encabezados HTTP está activo
+                // Este código 304 no devuelve ningún body, así que si quisiéramos que se mostrara el mensaje usaríamos un código 200 en su lugar.
+                return response()->json(['errors'=>array(['code'=>304,'message'=>'No se ha modificado ningún dato del avión.'])],304);
             }
+
         }
 
-        // Método PUT actualizamos todos los campos.
-        // Comprobamos que recibimos todos.
-        
-        if (!$nombre || !$direccion || !$telefono)
-		{
-			// Se devuelve código 422 Unprocessable Entity.
-			return response()->json(['errors'=>array(['code'=>422,'message'=>'Faltan valores para completar el procesamiento.'])],422);
+        // Si el método no es PATCH entonces es PUT y tendremos que actualizar todos los datos.
+        if (!$modelo || !$longitud || !$capacidad || !$velocidad || !$alcance)
+        {
+            // Se devuelve un array errors con los errores encontrados y cabecera HTTP 422 Unprocessable Entity – [Entidad improcesable] Utilizada para errores de validación.
+            return response()->json(['errors'=>array(['code'=>422,'message'=>'Faltan valores para completar el procesamiento.'])],422);
         }
-        
-        // Actualizamos los 3 campos:
-		$fabricante->nombre=$nombre;
-		$fabricante->direccion=$direccion;
-		$fabricante->telefono=$telefono;
 
-		// Grabamos el fabricante
-		$fabricante->save();
-		return response()->json(['status'=>'ok','data'=>$fabricante],200);
+        $avion->modelo = $modelo;
+        $avion->longitud = $longitud;
+        $avion->capacidad = $capacidad;
+        $avion->velocidad = $velocidad;
+        $avion->alcance = $alcance;
 
+        // Almacenamos en la base de datos el registro.
+        $avion->save();
 
-
+        return response()->json(['status'=>'ok','data'=>$avion], 200);
     }
 
     /**
@@ -232,43 +230,35 @@ class FabricanteAvionController extends Controller{
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function destroy($id)
+    public function destroy($idFabricante,$idAvion)
     {
-        // Borrado de un fabricante.
-		// Ejemplo: /fabricantes/89 por DELETE
-		// Comprobamos si el fabricante existe o no.
-        $fabricante=Fabricante::find($id);
-        
-        if (! $fabricante)
-		{
-			// Devolvemos error codigo http 404
-			return response()->json(['errors'=>array(['code'=>404,'message'=>'No se encuentra el fabricante con ese código.'])],404);
-        }
-        
-        // Borramos el fabricante y devolvemos código 204
-		// 204 significa "No Content".
-		// Este código no muestra texto en el body.
-		// Si quisiéramos ver el mensaje devolveríamos
-		// un código 200.
-		// Antes de borrarlo comprobamos si tiene aviones y si es así
-		// sacamos un mensaje de error.
-		// $aviones = $fabricante->aviones()->get();
-        $aviones = $fabricante->aviones;
-        
-        if (sizeof($aviones) >0)
-		{
-			// Si quisiéramos borrar todos los aviones del fabricante sería:
-			// $fabricante->aviones->delete();
+        // Comprobamos si el fabricante que nos están pasando existe o no.
+        $fabricante=Fabricante::find($idFabricante);
 
-			// Devolvemos un código 409 Conflict. 
-			return response()->json(['errors'=>array(['code'=>409,'message'=>'Este fabricante posee aviones y no puede ser eliminado.'])],409);
+        // Si no existe ese fabricante devolvemos un error.
+        if (!$fabricante)
+        {
+            // Se devuelve un array errors con los errores encontrados y cabecera HTTP 404.
+            // En code podríamos indicar un código de error personalizado de nuestra aplicación si lo deseamos.
+            return response()->json(['errors'=>array(['code'=>404,'message'=>'No se encuentra un fabricante con ese código.'])],404);
         }
-        
-        // Eliminamos el fabricante si no tiene aviones.
-        $fabricante->delete();
-        
-        // Se devuelve código 204 No Content.
-		return response()->json(['code'=>204,'message'=>'Se ha eliminado correctamente el fabricante.'],204);
 
+        // El fabricante existe entonces buscamos el avion que queremos borrar asociado a ese fabricante.
+        $avion = $fabricante->aviones()->find($idAvion);
+
+        // Si no existe ese avión devolvemos un error.
+        if (!$avion)
+        {
+            // Se devuelve un array errors con los errores encontrados y cabecera HTTP 404.
+            // En code podríamos indicar un código de error personalizado de nuestra aplicación si lo deseamos.
+            return response()->json(['errors'=>array(['code'=>404,'message'=>'No se encuentra un avión con ese código asociado a ese fabricante.'])],404);
+        }
+
+        // Procedemos por lo tanto a eliminar el avión.
+        $avion->delete();
+
+        // Se usa el código 204 No Content – [Sin Contenido] Respuesta a una petición exitosa que no devuelve un body (como una petición DELETE)
+        // Este código 204 no devuelve body así que si queremos que se vea el mensaje tendríamos que usar un código de respuesta HTTP 200.
+        return response()->json(['code'=>204,'message'=>'Se ha eliminado el avión correctamente.'],204);
     }
 }
