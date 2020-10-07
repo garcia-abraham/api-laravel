@@ -33,6 +33,16 @@ Route::prefix('v1')->group(function(){
     // entonces necesitaremos crear lo que se conoce como  "Recurso Anidado" de fabricantes con aviones.
     // Definición del recurso anidado:
     Route::resource('fabricantes.aviones','FabricanteAvionController',[ 'except'=>['show','edit','create'] ]);
+});
 
-
+//Rutas principales para la api
+Route::group(['prefix' => 'auth'], function () 
+{
+    Route::post('login', 'AuthController@login');
+    Route::post('signup', 'AuthController@signUp');
+    Route::group(['middleware' => 'auth:api'], function()
+    {
+        Route::get('logout', 'AuthController@logout');
+        Route::get('user', 'AuthController@user');
+    });
 });
